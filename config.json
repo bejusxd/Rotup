@@ -7,14 +7,14 @@
     "linux_user_gid": 1000,
     "disk_rotation": {
         "linux": [
-            "UUID_DYSKU_A_1234-ABCD",
-            "UUID_DYSKU_B_5678-EFGH",
-            "UUID_DYSKU_C_9012-IJKL"
+            "DYSK_A_1234-ABCD",
+            "DYSK_B_5678-EFGH",
+            "DYSK_C_9012-IJKL"
         ],
         "windows": [
-            "LABEL_DYSKU_A",
-            "LABEL_DYSKU_B",
-            "LABEL_DYSKU_C"
+            "BACKUP_A",
+            "BACKUP_B",
+            "BACKUP_C"
         ]
     }
 }
