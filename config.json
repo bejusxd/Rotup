@@ -1,0 +1,20 @@
+{
+    "source_directory": "/mnt/share/dane_firmowe",
+    "backup_filename_prefix": "rotup_backup",
+    "logging_directory": "/var/log/rotup",
+    "target_mount_point_linux": "/mnt/rotup_usb",
+    "linux_user_uid": 1000,
+    "linux_user_gid": 1000,
+    "disk_rotation": {
+        "linux": [
+            "UUID_DYSKU_A_1234-ABCD",
+            "UUID_DYSKU_B_5678-EFGH",
+            "UUID_DYSKU_C_9012-IJKL"
+        ],
+        "windows": [
+            "LABEL_DYSKU_A",
+            "LABEL_DYSKU_B",
+            "LABEL_DYSKU_C"
+        ]
+    }
+}
