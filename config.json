@@ -1,5 +1,5 @@
 {
-    "source_directory": "/mnt/share/dane_firmowe",
+    "source_directory": "/mnt/share/company_data",
     "backup_filename_prefix": "rotup_backup",
     "logging_directory": "/var/log/rotup",
     "target_mount_point_linux": "/mnt/rotup_usb",
@@ -7,14 +7,14 @@
     "linux_user_gid": 1000,
     "disk_rotation": {
         "linux": [
-            "DYSK_A_1234-ABCD",
-            "DYSK_B_5678-EFGH",
-            "DYSK_C_9012-IJKL"
+            "DISK_A_1234-ABCD",
+            "DISK_B_5678-EFGH",
+            "DISK_C_9012-IJKL"
         ],
         "windows": [
-            "BACKUP_A",
-            "BACKUP_B",
-            "BACKUP_C"
+            "BACKUP_DRIVE_A",
+            "BACKUP_DRIVE_B",
+            "BACKUP_DRIVE_C"
         ]
     }
 }

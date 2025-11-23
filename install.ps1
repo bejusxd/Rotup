@@ -1,72 +1,64 @@
-# --- ROTUP Windows Installation Script (install.ps1) ---
+# --- ROTUP Windows Installation Script (v2.0 English) ---
 
 $installDir = "C:\ProgramData\ROTUP"
-$logDir = "C:\ProgramData\ROTUP\Logs" # Domyślny, jeśli config.json zawiedzie
+$logDir = "C:\ProgramData\ROTUP\Logs"
 $scriptName = "rotup.py"
 $configName = "config.json"
 
-# Uruchamianie tylko z uprawnieniami Administratora
+# Check for Administrator privileges
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "--- Uruchamianie z podwyższonymi uprawnieniami (wymagane dla instalacji) ---" -ForegroundColor Yellow
+    Write-Host "--- Running with elevated privileges (Admin required) ---" -ForegroundColor Yellow
     Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -File `"$($MyInvocation.MyCommand.Path)`""
     exit
 }
 
-Write-Host "--- Rozpoczęcie instalacji programu ROTUP na Windows ---" -ForegroundColor Green
+Write-Host "--- Starting ROTUP v2.0 Installation on Windows ---" -ForegroundColor Green
 
-# 1. Sprawdzenie instalacji Pythona
+# 1. Check Python
 $pythonPath = Get-Command python -ErrorAction SilentlyContinue
 if (-not $pythonPath) {
-    Write-Host "BŁĄD: Python nie został znaleziony. Proszę zainstalować Python 3 i upewnić się, że jest w PATH." -ForegroundColor Red
-    Read-Host "Naciśnij Enter, aby zakończyć..."
+    Write-Host "ERROR: Python not found. Please install Python 3 and add to PATH." -ForegroundColor Red
+    Read-Host "Press Enter to exit..."
     exit 1
 }
-Write-Host "Znaleziono Pythona w: $($pythonPath.Source)"
+Write-Host "Python found at: $($pythonPath.Source)"
 
-# 2. Instalacja zależności Pythona
-Write-Host "Instaluję zależności Pythona (psutil)..."
+# 2. Install Dependencies
+Write-Host "Installing Python dependencies (psutil)..."
 & $pythonPath.Source -m pip install psutil
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "BŁĄD: Nie udało się zainstalować psutil." -ForegroundColor Red
-    Read-Host "Naciśnij Enter, aby zakończyć..."
+    Write-Host "ERROR: Failed to install psutil." -ForegroundColor Red
+    Read-Host "Press Enter to exit..."
     exit 1
 }
 
-# 3. Tworzenie katalogów
-Write-Host "Tworzę katalog instalacyjny w $installDir..."
+# 3. Create Directories
+Write-Host "Creating directories in $installDir..."
 New-Item -Path $installDir -ItemType Directory -Force | Out-Null
-New-Item -Path $logDir -ItemType Directory -Force | Out-Null # Domyślny log, na wszelki wypadek
+New-Item -Path $logDir -ItemType Directory -Force | Out-Null
 
-# 4. Kopiowanie plików
+# 4. Copy Files
 $sourceDir = $PSScriptRoot
-Write-Host "Kopiowanie plików z $sourceDir..."
+Write-Host "Copying files from $sourceDir..."
 Copy-Item -Path (Join-Path $sourceDir $scriptName) -Destination $installDir -Force
-Copy-Item -Path (Join-Path $sourceDir $configName) -Destination $installDir -Force
+if (Test-Path (Join-Path $sourceDir $configName)) {
+    Copy-Item -Path (Join-Path $sourceDir $configName) -Destination $installDir -Force
+}
 
-# 5. Konfiguracja harmonogramu (Task Scheduler)
+# 5. Task Scheduler
 $scriptPath = Join-Path $installDir $scriptName
 $taskName = "ROTUP_Daily_Backup"
 
-Write-Host "Ustawiam harmonogram Task Scheduler (codziennie o 1:00 w nocy)..."
+Write-Host "Configuring Task Scheduler (Daily at 01:00 AM)..."
 
-# Definicja akcji (uruchomienie Pythona ze skryptem i flagą --cron)
-# UWAGA: Upewnij się, że ścieżka $pythonPath.Source jest poprawna!
 $action = New-ScheduledTaskAction -Execute $pythonPath.Source -Argument "`"$scriptPath`" --cron"
-
-# Definicja wyzwalacza (codziennie o 1:00)
 $trigger = New-ScheduledTaskTrigger -Daily -At "01:00 AM"
-
-# Definicja ustawień (uruchamiaj jako SYSTEM, z najwyższymi uprawnieniami)
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
 
-# Rejestracja zadania
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 Register-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -TaskName $taskName -Description "Daily cross-platform rotation backup script (rotup)." -Force
 
 Write-Host ""
-Write-Host "--- INSTALACJA ROTUP ZAKOŃCZONA POMYŚLNIE! ---" -ForegroundColor Green
-Write-Host "PROSZĘ ZAPAMIĘTAĆ:"
-Write-Host "1. Pliki zostały zainstalowane w: $installDir" -ForegroundColor Yellow
-Write-Host "2. Upewnij się, że edytowałeś $installDir\$configName (Etykiety dysków, Ścieżki Windows)." -ForegroundColor Yellow
-Write-Host "3. Sprawdź Harmonogram Zadań (Task Scheduler), aby potwierdzić, że zadanie '$taskName' istnieje." -ForegroundColor Yellow
-Read-Host "Naciśnij Enter, aby zakończyć..."
+Write-Host "--- ROTUP INSTALLATION COMPLETED SUCCESSFULLY! ---" -ForegroundColor Green
+Write-Host "NEXT STEP: Go to $installDir and run rotup.py to configure disks." -ForegroundColor Yellow
+Read-Host "Press Enter to exit..."
