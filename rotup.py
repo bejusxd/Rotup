@@ -317,4 +317,70 @@ def open_settings_window(root):
         if system_os == "Linux":
             new_conf['disk_rotation']['linux'] = selected_disks
             # Defaults
-            if 'target_mount_point_'
+            if 'target_mount_point_linux' not in new_conf: new_conf['target_mount_point_linux'] = "/mnt/rotup_usb"
+            if 'logging_directory' not in new_conf: new_conf['logging_directory'] = "/var/log/rotup"
+        else:
+            new_conf['disk_rotation']['windows'] = selected_disks
+            if 'logging_directory' not in new_conf: new_conf['logging_directory'] = "C:\\ProgramData\\ROTUP\\Logs"
+
+        if save_config(new_conf):
+            messagebox.showinfo("Success", "Configuration saved! Restart backup to apply.")
+            settings_win.destroy()
+
+        tk.Button(settings_win, text="SAVE CONFIGURATION", command=save_settings, bg="lightblue", height=2).pack(
+            fill=tk.X, padx=10, pady=10)
+
+        # --- MAIN LOOP ---
+
+        def run_process():
+            if not load_config():
+                log_message("No configuration found! Click SETTINGS.", "WARN")
+                return
+
+            initialize_logging()
+            log_message("--- STARTING BACKUP ---")
+
+            sys_os = platform.system()
+            ok = False
+
+            if sys_os == "Linux":
+                mp = find_and_mount_linux()
+                if mp: ok = backup_logic_linux(mp)
+            elif sys_os == "Windows":
+                ok = backup_logic_windows()
+
+            log_message("--- SUCCESS ---" if ok else "--- FAILED ---")
+            if TEXT_WIDGET and ok: messagebox.showinfo("Info", "Backup Completed Successfully!")
+
+        def start_thread():
+            if TEXT_WIDGET: TEXT_WIDGET.delete('1.0', tk.END)
+            threading.Thread(target=run_process, daemon=True).start()
+
+        def main_ui():
+            global TEXT_WIDGET
+            root = tk.Tk()
+            root.title("ROTUP v2.0 - Auto Config")
+            root.geometry("700x550")
+
+            frame_top = tk.Frame(root)
+            frame_top.pack(fill=tk.X, padx=10, pady=10)
+
+            tk.Button(frame_top, text="SETTINGS / DISK CONFIG", command=lambda: open_settings_window(root),
+                      bg="orange").pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            tk.Button(root, text="START BACKUP NOW", command=start_thread, bg="lightgreen", font=("Arial", 12, "bold"),
+                      pady=10).pack(fill=tk.X, padx=10)
+
+            log_area = scrolledtext.ScrolledText(root)
+            log_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            TEXT_WIDGET = log_area
+
+            load_config()
+
+            root.mainloop()
+
+        if __name__ == "__main__":
+            if len(sys.argv) > 1 and sys.argv[1] == '--cron':
+                run_process()
+            else:
+                main_ui()
