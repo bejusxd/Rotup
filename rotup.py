@@ -317,4 +317,4 @@ def open_settings_window(root):
         if system_os == "Linux":
             new_conf['disk_rotation']['linux'] = selected_disks
             # Defaults
-            if 'target_mount_point_
+            if 'target_mount_point_'
