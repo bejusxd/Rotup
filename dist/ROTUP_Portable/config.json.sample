@@ -1,0 +1,8 @@
+{
+    "source_directories": [],
+    "disk_rotation": {
+        "windows": []
+    },
+    "logging_directory": "./logs",
+    "backup_filename_prefix": "backup"
+}

@@ -43,8 +43,12 @@ def build_exe():
     print("\n🔨 Building executable...")
 
     # PyInstaller command
+    # PyInstaller command
     cmd = [
-        "pyinstaller",
+        sys.executable,  # Ścieżka do aktywnego Pythona (C:\Users\Bejoz\...)
+        "-m",  # Argument do uruchomienia modułu
+        "PyInstaller",
+        "--name=ROTUP",  # Output name
         "--name=ROTUP",  # Output name
         "--onefile",  # Single executable file
         "--windowed",  # No console window (GUI only)
