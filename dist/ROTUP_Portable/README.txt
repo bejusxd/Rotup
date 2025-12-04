@@ -1,4 +1,4 @@
-ROTUP v2.0 - Rotation Backup Tool
+ROTUP v0.6 - Rotation Backup Tool
 =====================================
 
 Portable Windows Version
