@@ -702,7 +702,7 @@ def main_ui():
 
     try:
         root = tk.Tk()
-        root.title("ROTUP v2.0 - Rotation Backup Tool")
+        root.title("ROTUP v0.6 - Rotation Backup Tool by Bejus")
         root.geometry("800x600")
         root.configure(bg="#f0f0f0")
 
@@ -730,7 +730,7 @@ def main_ui():
 
         subtitle_label = tk.Label(
             header_frame,
-            text="Rotation Backup Tool v2.0",
+            text="Rotation Backup Tool v0.6",
             font=("Arial", 10),
             bg=COLOR_PRIMARY,
             fg="white"
@@ -860,7 +860,7 @@ def main_ui():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("ROTUP v2.0 - Rotation Backup Tool")
+    print("ROTUP v0.6 - Rotation Backup Tool")
     print("=" * 60)
     print(f"[DEBUG] Python version: {sys.version}")
     print(f"[DEBUG] Platform: {platform.system()} {platform.release()}")

@@ -22,7 +22,7 @@ def build_exe():
     """Builds Windows executable using PyInstaller"""
 
     print("=" * 60)
-    print("ROTUP v2.0 - Building Windows Executable")
+    print("ROTUP v0.6 BETA - Building Windows Executable")
     print("=" * 60)
 
     # Check if PyInstaller is installed
@@ -78,7 +78,7 @@ def build_exe():
         shutil.copy2("dist/ROTUP.exe", f"{package_dir}/ROTUP.exe")
 
         # Create README
-        readme_content = """ROTUP v2.0 - Rotation Backup Tool
+        readme_content = """ROTUP v0.6 - Rotation Backup Tool
 =====================================
 
 Portable Windows Version
@@ -121,13 +121,13 @@ https://github.com/YOUR_REPO/rotup
 
         # Create ZIP archive
         print("📦 Creating ZIP archive...")
-        shutil.make_archive("dist/ROTUP_v2.0_Windows_Portable", "zip", "dist", "ROTUP_Portable")
+        shutil.make_archive("dist/ROTUP_v0.6_Windows_Portable", "zip", "dist", "ROTUP_Portable")
 
         print("\n✅ ============================================")
         print("✅ Build process completed!")
         print("✅ ============================================")
         print(f"\n📦 Standalone EXE: dist/ROTUP.exe")
-        print(f"📦 Portable package: dist/ROTUP_v2.0_Windows_Portable.zip")
+        print(f"📦 Portable package: dist/ROTUP_v0.6_Windows_Portable.zip")
         print("\nDistribute the ZIP file for easy deployment!")
 
         return True
