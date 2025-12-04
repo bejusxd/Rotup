@@ -3,7 +3,7 @@
 # Or: powershell -ExecutionPolicy Bypass -File install_rotup.ps1
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "ROTUP v2.0 - Rotation Backup Tool" -ForegroundColor Cyan
+Write-Host "ROTUP v0.6 alpha - Rotation Backup Tool" -ForegroundColor Cyan
 Write-Host "Windows Installer" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 

@@ -22,7 +22,7 @@ def build_exe():
     """Builds Windows executable using PyInstaller"""
 
     print("=" * 60)
-    print("ROTUP v0.6 BETA - Building Windows Executable")
+    print("ROTUP v0.6 alpha - Building Windows Executable")
     print("=" * 60)
 
     # Check if PyInstaller is installed

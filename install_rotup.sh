@@ -5,7 +5,7 @@
 set -e
 
 echo "========================================"
-echo "ROTUP v2.0 - Rotation Backup Tool"
+echo "ROTUP v0.6 alpha - Rotation Backup Tool"
 echo "Linux Installer"
 echo "========================================"
 
