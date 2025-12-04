@@ -1,5 +1,9 @@
 {
-    "source_directory": "/mnt/share/company_data",
+    "source_directories": [
+        "/mnt/share/company_data",
+        "/mnt/share/invoices",
+        "/home/user/important_docs"
+    ],
     "backup_filename_prefix": "rotup_backup",
     "logging_directory": "/var/log/rotup",
     "target_mount_point_linux": "/mnt/rotup_usb",
