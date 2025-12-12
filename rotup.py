@@ -43,6 +43,39 @@ except ImportError as e:
     sys.exit(1)
 
 
+# === HIDE TERMINAL WINDOW (CROSS-PLATFORM) ===
+def hide_terminal():
+    """Hide console window on both Windows and Linux"""
+    system = platform.system()
+
+    if system == "Windows":
+        # Windows: Hide console window
+        try:
+            import ctypes
+            kernel32 = ctypes.WinDLL('kernel32')
+            user32 = ctypes.WinDLL('user32')
+            SW_HIDE = 0
+            hWnd = kernel32.GetConsoleWindow()
+            if hWnd:
+                user32.ShowWindow(hWnd, SW_HIDE)
+        except Exception as e:
+            print(f"[DEBUG] Could not hide Windows terminal: {e}")
+
+    elif system == "Linux":
+        # Linux: Redirect stdout/stderr to /dev/null if not in cron mode
+        if '--cron' not in sys.argv and '--debug' not in sys.argv:
+            try:
+                # Tylko jeśli nie jesteśmy w trybie cron lub debug
+                sys.stdout = open(os.devnull, 'w')
+                sys.stderr = open(os.devnull, 'w')
+            except Exception as e:
+                pass  # Ignoruj błędy
+
+
+# Wywołaj ukrywanie terminala (NIE w trybie cron!)
+if '--cron' not in sys.argv and '--debug' not in sys.argv:
+    hide_terminal()
+
 # --- CONFIGURATION HANDLING ---
 
 def load_config():
@@ -1208,15 +1241,25 @@ def main_ui():
 
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("ROTUP v0.7 - Rotation Backup Tool")
-    print("=" * 60)
-    print(f"[DEBUG] Python version: {sys.version}")
-    print(f"[DEBUG] Platform: {platform.system()} {platform.release()}")
-    print(f"[DEBUG] Working directory: {os.getcwd()}")
-    print(f"[DEBUG] Script location: {BASE_DIR}")
-    print(f"[DEBUG] Config file: {CONFIG_FILE}")
-    print("=" * 60)
+    # Tryb debug - pokaż wszystkie logi
+    if '--debug' in sys.argv:
+        print("=" * 60)
+        print("ROTUP v0.6 - DEBUG MODE")
+        print("=" * 60)
+
+    # Tryb normalny - ukryj terminal (już wykonane przez hide_terminal())
+    if '--cron' not in sys.argv and '--debug' not in sys.argv:
+        pass  # Terminal już ukryty przez hide_terminal()
+    else:
+        print("=" * 60)
+        print("ROTUP v0.6 - Rotation Backup Tool")
+        print("=" * 60)
+        print(f"[DEBUG] Python version: {sys.version}")
+        print(f"[DEBUG] Platform: {platform.system()} {platform.release()}")
+        print(f"[DEBUG] Working directory: {os.getcwd()}")
+        print(f"[DEBUG] Script location: {BASE_DIR}")
+        print(f"[DEBUG] Config file: {CONFIG_FILE}")
+        print("=" * 60)
 
     try:
         if len(sys.argv) > 1 and sys.argv[1] == '--cron':
@@ -1224,17 +1267,22 @@ if __name__ == "__main__":
             load_config()
             run_process()
         else:
-            print("[DEBUG] GUI mode - starting interface")
+            if '--debug' not in sys.argv:
+                # Normalny tryb - bez logów
+                pass
+            else:
+                print("[DEBUG] GUI mode - starting interface")
             main_ui()
     except Exception as e:
-        print("\n" + "!" * 60)
-        print("CRITICAL ERROR - Program cannot start!")
-        print("!" * 60)
-        print(f"\nError type: {type(e).__name__}")
-        print(f"Message: {e}")
-        print("\nFull traceback:")
-        traceback.print_exc()
-        print("\n" + "!" * 60)
+        if '--debug' in sys.argv:
+            print("\n" + "!" * 60)
+            print("CRITICAL ERROR - Program cannot start!")
+            print("!" * 60)
+            print(f"\nError type: {type(e).__name__}")
+            print(f"Message: {e}")
+            print("\nFull traceback:")
+            traceback.print_exc()
+            print("\n" + "!" * 60)
 
         try:
             error_log = os.path.join(os.path.dirname(CONFIG_FILE), "rotup_error.log")
@@ -1247,7 +1295,9 @@ if __name__ == "__main__":
         except:
             pass
 
-        input("\nPress Enter to exit...")
+        if '--debug' in sys.argv:
+            input("\nPress Enter to exit...")
         sys.exit(1)
 
-    print("[DEBUG] Program finished normally")
+    if '--debug' in sys.argv:
+        print("[DEBUG] Program finished normally")
