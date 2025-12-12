@@ -5,9 +5,11 @@ import os
 import subprocess
 import datetime
 import threading
+import shutil
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, filedialog, ttk
 import traceback
+import queue
 
 # --- GLOBALS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +18,7 @@ CONFIG = {}
 LOG_FILE = ""
 BACKUP_FILENAME = ""
 TEXT_WIDGET = None
+LOG_QUEUE = queue.Queue()
 
 # Check psutil availability with clear error message
 try:
@@ -62,7 +65,7 @@ def hide_terminal():
             print(f"[DEBUG] Could not hide Windows terminal: {e}")
 
     elif system == "Linux":
-        # Linux: Redirect stdout/stderr to /dev/null if not in cron mode
+
         if '--cron' not in sys.argv and '--debug' not in sys.argv:
             try:
                 # Tylko jeśli nie jesteśmy w trybie cron lub debug
@@ -164,12 +167,12 @@ def get_available_disks_windows():
                         # FIX: Dodaj encoding='utf-8' i errors='ignore'
                         cmd = f"(Get-Volume -DriveLetter '{drive_letter}').FileSystemLabel"
                         print(f"[DEBUG] Executing PowerShell: {cmd}")
-                        result = subprocess.check_output(
+                        result = subprocess.run(
                             ['powershell', '-Command', cmd],
+                            capture_output=True,
                             text=True,
-                            encoding='utf-8',  # NOWE
-                            errors='ignore',    # NOWE - ignoruj błędy dekodowania
-                            stderr=subprocess.PIPE,
+                            encoding='utf-8',
+                            errors='ignore',
                             timeout=5
                         )
                         label = result.strip()
@@ -215,30 +218,53 @@ def initialize_logging():
 
 
 def log_message(message, level="INFO"):
-    """Logs message to file and displays in GUI"""
+    """Logs message to file and queues it for GUI display"""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] {level}: {message}\n"
+
+    # Formatowanie koloru
+    if level == "INFO":
+        prefix = "ℹ️"
+        color_tag = "info"
+    elif level == "WARN":
+        prefix = "⚠️"
+        color_tag = "warning"
+    elif level == "ERROR" or level == "FATAL":
+        prefix = "❌"
+        color_tag = "error"
+    elif level == "SUCCESS":
+        prefix = "✅"
+        color_tag = "success"
+    else:
+        prefix = "📝"
+        color_tag = "normal"
+
+    log_entry = f"[{timestamp}] {prefix} {level}: {message}\n"
     print(log_entry.strip())
     if LOG_FILE:
         try:
             with open(LOG_FILE, 'a', encoding='utf-8') as f:
                 f.write(log_entry)
+                f.flush()
         except Exception as e:
             print(f"[DEBUG] Cannot write to log: {e}")
-    if TEXT_WIDGET:
-        try:
-            TEXT_WIDGET.insert(tk.END, log_entry)
-            TEXT_WIDGET.see(tk.END)
-        except Exception as e:
-            print(f"[DEBUG] Cannot update GUI: {e}")
-
+    LOG_QUEUE.put((log_entry, color_tag))
 
 def run_command(command, error_message):
     """Executes system command"""
     try:
         log_message(f"CMD: {' '.join(command)}")
-        subprocess.run(command, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            command,
+            capture_output=True,  # ✅ Poprawne
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+            check=True
+        )
         return True
+    except subprocess.CalledProcessError as e:
+        log_message(f"{error_message}: {e.stderr if e.stderr else str(e)}", "ERROR")
+        return False
     except Exception as e:
         log_message(f"{error_message}: {e}", "ERROR")
         return False
@@ -248,15 +274,18 @@ def run_powershell_command(command, error_message):
     """Executes PowerShell command"""
     try:
         log_message(f"PS: {command}")
-        subprocess.run(
+        result = subprocess.run(
             ['powershell', '-Command', command],
             capture_output=True,
             text=True,
-            encoding='utf-8',    # NOWE
-            errors='ignore',      # NOWE
+            encoding='utf-8',
+            errors='ignore',
             check=True
         )
         return True
+    except subprocess.CalledProcessError as e:
+        log_message(f"{error_message}: {e.stderr if e.stderr else str(e)}", "ERROR")
+        return False
     except Exception as e:
         log_message(f"{error_message}: {e}", "ERROR")
         return False
@@ -271,15 +300,35 @@ def find_and_mount_linux():
 
     # Sprawdź czy punkt montowania już istnieje i jest zamontowany
     try:
-        mount_output = subprocess.check_output(['mount'], text=True)
-        if mount_point in mount_output:
+        result = subprocess.run(
+            ['mount'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore'
+        )
+
+        if result.returncode == 0 and mount_point in result.stdout:
             log_message(f"Mount point {mount_point} already in use, unmounting...", "WARN")
             subprocess.run(['umount', mount_point], stderr=subprocess.DEVNULL)
     except:
         pass
 
     try:
-        blkid_output = subprocess.check_output(['blkid'], text=True).strip()
+        result = subprocess.run(
+            ['blkid'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore'
+        )
+
+        if result.returncode != 0:
+            log_message(f"Missing permissions or 'blkid' tool: {result.stderr}", "FATAL")
+            return None
+
+        blkid_output = result.stdout.strip()
+
     except Exception as e:
         log_message(f"Missing permissions or 'blkid' tool: {e}", "FATAL")
         return None
@@ -349,29 +398,40 @@ def backup_logic_linux(mount_path):
         return False
 
     # Skopiuj log do archiwum ZIP
+        # Skopiuj log obok ZIP (w tym samym folderze)
     if LOG_FILE and os.path.exists(LOG_FILE):
-        log_message("Adding log file to archive...", "INFO")
-        subprocess.run(['zip', '-u', target, LOG_FILE], stderr=subprocess.DEVNULL)
+            try:
+                log_copy_path = os.path.join(mount_path, os.path.basename(LOG_FILE))
+                log_message(f"Copying log to: {log_copy_path}", "INFO")
 
-    log_message("Unmounting disk...", "INFO")
-    unmount_result = subprocess.run(['umount', mount_path], capture_output=True, text=True)
-    if unmount_result.returncode == 0:
-        log_message("Disk unmounted successfully", "INFO")
-    else:
-        log_message(f"Unmount warning: {unmount_result.stderr}", "WARN")
+                # Skopiuj plik logu
+                import shutil
+                shutil.copy2(LOG_FILE, log_copy_path)
+                log_message("Log file copied to backup disk", "SUCCESS")
 
-    return True
+                # OPCJONALNIE: Dodaj też do ZIP
+                log_message("Adding log to ZIP archive", "INFO")
+                add_log_cmd = ['zip', '-u', target, LOG_FILE]
+                result = subprocess.run(add_log_cmd, capture_output=True)
+
+                if result.returncode == 0:
+                    log_message("Log file added to ZIP", "SUCCESS")
+                else:
+                    log_message("Could not add log to ZIP (non-critical)", "WARN")
+
+            except Exception as e:
+                log_message(f"Could not copy log file: {e}", "WARN")
 
 # --- LOGIC: WINDOWS ---
 
 def backup_logic_windows():
     """Performs backup on Windows system"""
-    log_message("Starting Windows backup process...", "INFO")
+    log_message("Starting Windows backup process", "INFO")
     found_letter = None
     windows_labels = CONFIG.get('disk_rotation', {}).get('windows', [])
 
     if not windows_labels:
-        log_message("No Windows disks configured in rotation list!", "ERROR")
+        log_message("No Windows disks configured!", "ERROR")
         return False
 
     log_message(f"Looking for disks: {', '.join(windows_labels)}", "INFO")
@@ -380,25 +440,33 @@ def backup_logic_windows():
         try:
             drive_letter = part.device.rstrip('\\').rstrip(':')
             cmd = f"(Get-Volume -DriveLetter '{drive_letter}').FileSystemLabel"
-            label = subprocess.check_output(
+
+            result = subprocess.run(
                 ['powershell', '-Command', cmd],
+                capture_output=True,
                 text=True,
-                encoding='utf-8',  # NOWE
-                errors='ignore',  # NOWE
-                stderr=subprocess.PIPE,
+                encoding='utf-8',
+                errors='ignore',
                 timeout=5
-            ).strip()
-            print(f"[DEBUG] Checking disk {drive_letter}: label='{label}'")
-            if label in windows_labels:
-                found_letter = drive_letter
-                log_message(f"Found backup disk: {label} ({found_letter}:)", "INFO")
-                break
+            )
+
+            if result.returncode == 0:
+                label = result.stdout.strip()
+                print(f"[DEBUG] Checking disk {drive_letter}: label='{label}'")
+
+                if label in windows_labels:
+                    found_letter = drive_letter
+                    log_message(f"Found backup disk: {label} ({found_letter}:)", "SUCCESS")
+                    break
+
+        except subprocess.TimeoutExpired:
+            print(f"[DEBUG] Timeout checking {part.device}")
         except Exception as e:
             print(f"[DEBUG] Error checking {part.device}: {e}")
             continue
 
     if not found_letter:
-        log_message("No disk from the rotation list found.", "ERROR")
+        log_message("No rotation disk found - please connect backup drive", "ERROR")
         return False
 
     source_dirs = CONFIG.get('source_directories', [])
@@ -421,15 +489,35 @@ def backup_logic_windows():
         return False
 
     # Dodaj log do archiwum
+        # Skopiuj log obok ZIP (w tym samym folderze)
     if LOG_FILE and os.path.exists(LOG_FILE):
-        log_message("Adding log file to archive...", "INFO")
-        log_win = LOG_FILE.replace('/', '\\')
-        add_log_cmd = f"Compress-Archive -Path '{log_win}' -Update -DestinationPath '{target}'"
-        subprocess.run(['powershell', '-Command', add_log_cmd],
-                       capture_output=True, stderr=subprocess.DEVNULL)
+            try:
+                log_copy_path = os.path.join(f"{found_letter}:\\", os.path.basename(LOG_FILE))
+                log_message(f"Copying log to: {log_copy_path}", "INFO")
 
-    log_message("Backup file created successfully", "INFO")
-    return True
+                # Skopiuj plik logu
+                import shutil
+                shutil.copy2(LOG_FILE, log_copy_path)
+                log_message("Log file copied to backup disk", "SUCCESS")
+
+                # OPCJONALNIE: Dodaj też do ZIP
+                log_message("Adding log to ZIP archive", "INFO")
+                log_win = LOG_FILE.replace('/', '\\')
+                add_log_cmd = f"Compress-Archive -Path '{log_win}' -Update -DestinationPath '{target}'"
+                result = subprocess.run(
+                    ['powershell', '-Command', add_log_cmd],
+                    capture_output=True,
+                    encoding='utf-8',
+                    errors='ignore',
+                )
+
+                if result.returncode == 0:
+                    log_message("Log file added to ZIP", "SUCCESS")
+                else:
+                    log_message("Could not add log to ZIP (non-critical)", "WARN")
+
+            except Exception as e:
+                log_message(f"Could not copy log file: {e}", "WARN")
 
 # --- UI ---
 
@@ -735,9 +823,18 @@ def open_settings_window(root):
     system_os = platform.system()
     if system_os == "Linux":
         try:
-            cron_output = subprocess.check_output(['crontab', '-l'], stderr=subprocess.DEVNULL, text=True)
-            if 'rotup.py --cron' in cron_output and not cron_output.strip().startswith('#'):
-                auto_enabled_var.set(True)
+            result = subprocess.run(
+                ['crontab', '-l'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='ignore'
+            )
+
+            if result.returncode == 0:
+                cron_output = result.stdout
+                if 'rotup.py --cron' in cron_output and not cron_output.strip().startswith('#'):
+                    auto_enabled_var.set(True)
         except:
             pass
     else:  # Windows
@@ -822,6 +919,7 @@ def open_settings_window(root):
         bg=COLOR_CARD,
         fg="#666"
     ).pack(side=tk.LEFT, padx=15)
+
     # === SAVE BUTTON ===
     def save_settings():
         print("[DEBUG] Saving settings...")
@@ -881,16 +979,29 @@ def open_settings_window(root):
         if system_os == "Linux":
             try:
                 rotup_path = os.path.abspath(__file__)
+                backup_hour = new_conf.get('backup_hour', '02')
+                backup_minute = new_conf.get('backup_minute', '00')
                 cron_line = f"{backup_minute} {backup_hour} * * * /usr/bin/python3 {rotup_path} --cron"
 
-                # Get current crontab
-                try:
-                    current_cron = subprocess.check_output(['crontab', '-l'], stderr=subprocess.DEVNULL, text=True)
-                except:
+                # Get current user's crontab
+                current_user = os.environ.get('USER', os.environ.get('USERNAME', 'root'))
+
+                result = subprocess.run(
+                    ['crontab', '-l'],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
+
+                if result.returncode == 0:
+                    current_cron = result.stdout
+                else:
                     current_cron = ""
 
                 # Remove old ROTUP entries
-                lines = [l for l in current_cron.splitlines() if 'rotup.py --cron' not in l and 'rotup --cron' not in l]
+                lines = [l for l in current_cron.splitlines()
+                         if 'rotup.py --cron' not in l and 'rotup --cron' not in l]
 
                 # Add new entry if enabled
                 if auto_enabled:
@@ -898,18 +1009,38 @@ def open_settings_window(root):
 
                 # Write new crontab
                 new_cron = '\n'.join(lines) + '\n'
-                process = subprocess.Popen(['crontab', '-'], stdin=subprocess.PIPE, text=True)
-                process.communicate(input=new_cron)
 
-                if process.returncode == 0:
-                    status = "enabled" if auto_enabled else "disabled"
-                    print(f"[DEBUG] Automatic backup {status} at {backup_hour}:{backup_minute}")
-                    messagebox.showinfo("Success",
-                                        f"Configuration saved!\nAutomatic backup {status} at {backup_hour}:{backup_minute}")
-                else:
-                    messagebox.showwarning("Cron Error", "Could not update crontab. You may need sudo privileges.")
+                # Try to write as current user first
+                try:
+                    process = subprocess.Popen(['crontab', '-'],
+                                               stdin=subprocess.PIPE,
+                                               text=True,
+                                               stdout=subprocess.PIPE,
+                                               stderr=subprocess.PIPE)
+                    stdout, stderr = process.communicate(input=new_cron)
+
+                    if process.returncode == 0:
+                        status = "enabled" if auto_enabled else "disabled"
+                        print(f"[DEBUG] Automatic backup {status} at {backup_hour}:{backup_minute}")
+                        messagebox.showinfo("Success",
+                                            f"Configuration saved!\nAutomatic backup {status} at {backup_hour}:{backup_minute}")
+                    else:
+                        raise subprocess.CalledProcessError(process.returncode, 'crontab')
+
+                except subprocess.CalledProcessError as e:
+                    # Jeśli nie ma uprawnień, pokaż instrukcje
+                    messagebox.showwarning("Cron Setup",
+                                           f"Automatic backup configuration requires manual setup.\n\n"
+                                           f"Run this command in terminal:\n\n"
+                                           f"crontab -e\n\n"
+                                           f"Then add this line:\n"
+                                           f"{cron_line}\n\n"
+                                           f"Or run ROTUP with sudo to enable automatic backup.")
+
             except Exception as e:
-                messagebox.showwarning("Cron Error", f"Could not configure automatic backup: {e}")
+                messagebox.showwarning("Cron Error",
+                                       f"Could not configure automatic backup: {e}\n"
+                                       f"You may need to run with sudo privileges.")
 
         else:  # Windows
             try:
@@ -925,7 +1056,7 @@ def open_settings_window(root):
 
                     # Usuń stare zadanie
                     subprocess.run(['schtasks', '/Delete', '/TN', task_name, '/F'],
-                                   capture_output=True, stderr=subprocess.DEVNULL)
+                                   capture_output=True)
 
                     # Utwórz nowe
                     cmd = [
@@ -1020,38 +1151,68 @@ def run_process():
 def start_thread():
     """Starts backup process in separate thread"""
     print("[DEBUG] Starting backup thread...")
+
+    # Wyczyść logi
     if TEXT_WIDGET:
         TEXT_WIDGET.delete('1.0', tk.END)
+        TEXT_WIDGET.update()
+
+    # Pobierz root window
+    root = None
+    if TEXT_WIDGET:
+        root = TEXT_WIDGET.master
+        while root.master:
+            root = root.master
 
     # Uruchom progress bar
-    root = TEXT_WIDGET.master
-    while root.master:
-        root = root.master
-
-    if hasattr(root, 'progress_bar'):
+    if root and hasattr(root, 'progress_bar'):
         root.progress_bar.start(10)
         root.progress_status.config(text="Backup in progress...", fg="#FF9800")
+        root.update()
 
     def run_with_cleanup():
         try:
+            # WAŻNE: Załaduj konfigurację przed backupem
+            if not CONFIG:
+                load_config()
+
             run_process()
+
+        except Exception as e:
+            log_message(f"Thread error: {e}", "ERROR")
+            traceback.print_exc()
         finally:
             # Zatrzymaj progress bar
-            if hasattr(root, 'progress_bar'):
-                root.progress_bar.stop()
-                root.progress_status.config(text="Completed", fg="#4CAF50")
+            if root and hasattr(root, 'progress_bar'):
+                try:
+                    root.progress_bar.stop()
+                    root.progress_status.config(text="Completed", fg="#4CAF50")
+                except:
+                    pass
 
     threading.Thread(target=run_with_cleanup, daemon=True).start()
-
-
 def main_ui():
+    def process_log_queue():
+        """Reads messages from background thread and updates GUI safely"""
+        try:
+            while not LOG_QUEUE.empty():
+                msg, tag = LOG_QUEUE.get_nowait()
+                if TEXT_WIDGET:
+                    TEXT_WIDGET.insert(tk.END, msg, tag)
+                    TEXT_WIDGET.see(tk.END)
+        except queue.Empty:
+            pass
+        finally:
+            # Sprawdzaj kolejkę ponownie za 100ms
+            if TEXT_WIDGET:
+                TEXT_WIDGET.after(100, process_log_queue)
     """Creates and runs main GUI window"""
     global TEXT_WIDGET
     print("[DEBUG] Initializing GUI...")
 
     try:
         root = tk.Tk()
-        root.title("ROTUP v0.7 - Rotation Backup Tool by Bejus")
+        root.title("ROTUP v0.7.1 - Rotation Backup Tool by Bejus")
         root.geometry("800x650")
         root.configure(bg="#f0f0f0")
 
@@ -1079,7 +1240,7 @@ def main_ui():
 
         subtitle_label = tk.Label(
             header_frame,
-            text="Rotation Backup Tool v0.7 by Bejus",
+            text="Rotation Backup Tool v0.7.1 by Bejus",
             font=("Arial", 10),
             bg=COLOR_PRIMARY,
             fg="white"
@@ -1209,6 +1370,11 @@ def main_ui():
         )
         log_area.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         TEXT_WIDGET = log_area
+        # Uruchom bezpieczne odświeżanie logów z kolejki
+        root.after(100, process_log_queue)
+        # TEST: Sprawdź czy logi działają
+        log_message("ROTUP GUI initialized successfully", "SUCCESS")
+        log_message("Ready to start backup", "INFO")
 
         # Status bar
         status_bar = tk.Frame(root, bg="#263238", height=25)
@@ -1244,7 +1410,7 @@ if __name__ == "__main__":
     # Tryb debug - pokaż wszystkie logi
     if '--debug' in sys.argv:
         print("=" * 60)
-        print("ROTUP v0.6 - DEBUG MODE")
+        print("ROTUP v0.7.1 - DEBUG MODE")
         print("=" * 60)
 
     # Tryb normalny - ukryj terminal (już wykonane przez hide_terminal())
@@ -1252,7 +1418,7 @@ if __name__ == "__main__":
         pass  # Terminal już ukryty przez hide_terminal()
     else:
         print("=" * 60)
-        print("ROTUP v0.6 - Rotation Backup Tool")
+        print("ROTUP v0.7.1 - Rotation Backup Tool")
         print("=" * 60)
         print(f"[DEBUG] Python version: {sys.version}")
         print(f"[DEBUG] Platform: {platform.system()} {platform.release()}")

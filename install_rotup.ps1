@@ -3,7 +3,7 @@
 # Or: powershell -ExecutionPolicy Bypass -File install_rotup.ps1
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "ROTUP v0.6 alpha - Rotation Backup Tool" -ForegroundColor Cyan
+Write-Host "ROTUP v0.7.1 - Rotation Backup Tool" -ForegroundColor Cyan
 Write-Host "Windows Installer" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 
@@ -100,7 +100,7 @@ $DesktopLink.Save()
 Write-Host "⏰ Creating scheduled task for automatic backup..." -ForegroundColor Yellow
 $TaskName = "ROTUP_AutoBackup"
 $TaskDescription = "Automatic rotation backup at 2:00 AM daily"
-$TaskAction = New-ScheduledTaskAction -Execute "python.exe" -Argument "`"$rotupPath`" --cron" -WorkingDirectory $INSTALL_DIR
+$TaskAction = New-ScheduledTaskAction -Execute $pythonPath -Argument "`"$rotupPath`" --cron" -WorkingDirectory $INSTALL_DIR
 $TaskTrigger = New-ScheduledTaskTrigger -Daily -At 2:00AM
 $TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 4)
 $TaskPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
