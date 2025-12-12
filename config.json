@@ -1,8 +1,7 @@
 {
     "source_directories": [
-        "/mnt/share/company_data",
-        "/mnt/share/invoices",
-        "/home/user/important_docs"
+        "/copany_data/path1",
+        "/copany_data2/path1/file1"
     ],
     "backup_filename_prefix": "rotup_backup",
     "logging_directory": "/var/log/rotup",
@@ -20,5 +19,7 @@
             "BACKUP_DRIVE_B",
             "BACKUP_DRIVE_C"
         ]
-    }
+    },
+    "backup_hour": "02",
+    "backup_minute": "00"
 }
