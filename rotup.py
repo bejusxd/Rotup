@@ -62,17 +62,21 @@ def hide_terminal():
             if hWnd:
                 user32.ShowWindow(hWnd, SW_HIDE)
         except Exception as e:
-            print(f"[DEBUG] Could not hide Windows terminal: {e}")
+            # Zaloguj błąd ale nie przerywaaj
+            print(f"[WARNING] Could not hide Windows terminal: {e}", file=sys.stderr)
 
     elif system == "Linux":
 
         if '--cron' not in sys.argv and '--debug' not in sys.argv:
             try:
                 # Tylko jeśli nie jesteśmy w trybie cron lub debug
+                # Ale najpierw zaloguj do pliku jeśli coś pójdzie nie tak
                 sys.stdout = open(os.devnull, 'w')
                 sys.stderr = open(os.devnull, 'w')
             except Exception as e:
-                pass  # Ignoruj błędy
+                # Jeśli nawet to się nie powiedzie, wypisz na oryginalny stderr
+                import sys as sys_orig
+                print(f"[WARNING] Could not redirect output on Linux: {e}", file=sys_orig.__stderr__)
 
 
 # Wywołaj ukrywanie terminala (NIE w trybie cron!)
@@ -1144,8 +1148,6 @@ def run_process():
         messagebox.showerror("Error", "Backup failed! Check logs for details.")
 
     log_message("--- SUCCESS ---" if ok else "--- FAILED ---")
-    if TEXT_WIDGET and ok:
-        messagebox.showinfo("Info", "Backup Completed Successfully!")
 
 
 def start_thread():
@@ -1181,14 +1183,14 @@ def start_thread():
         except Exception as e:
             log_message(f"Thread error: {e}", "ERROR")
             traceback.print_exc()
-        finally:
+            finally:
             # Zatrzymaj progress bar
             if root and hasattr(root, 'progress_bar'):
                 try:
                     root.progress_bar.stop()
                     root.progress_status.config(text="Completed", fg="#4CAF50")
-                except:
-                    pass
+                except Exception as cleanup_error:
+                    log_message(f"Warning: Could not stop progress bar: {cleanup_error}", "WARN")
 
     threading.Thread(target=run_with_cleanup, daemon=True).start()
 def main_ui():
@@ -1458,9 +1460,10 @@ if __name__ == "__main__":
                 f.write(f"Error: {e}\n")
                 f.write(traceback.format_exc())
                 f.write(f"{'=' * 60}\n")
-        except:
-            pass
-
+        except Exception as log_error:
+            print(f"[CRITICAL] Could not write error log: {log_error}")
+            print(f"[CRITICAL] Original error: {e}")
+            traceback.print_exc()
         if '--debug' in sys.argv:
             input("\nPress Enter to exit...")
         sys.exit(1)
